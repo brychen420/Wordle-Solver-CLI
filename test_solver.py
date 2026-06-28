@@ -19,6 +19,7 @@ from wordle_solver import (
     DEFAULT_OPENING,
     MAX_TURNS,
     WORD_LEN,
+    PatternTable,
     best_guess,
     filter_candidates,
     load_pools,
@@ -30,9 +31,10 @@ from wordle_solver import (
 # --------------------------------------------------------------------------- #
 # Auto-play a single known answer                                             #
 # --------------------------------------------------------------------------- #
-def solve_for(answer, answers, guess_pool, verbose=False):
+def solve_for(answer, answers, guess_pool, verbose=False, table=None):
     """Auto-play the solver against a known answer. Return number of guesses
-    used, or MAX_TURNS + 1 if it failed within the limit."""
+    used, or MAX_TURNS + 1 if it failed within the limit. Pass a shared
+    PatternTable to reuse the precomputed feedback matrix across games."""
     candidates = list(answers)
     guess = DEFAULT_OPENING
     for turn in range(1, MAX_TURNS + 1):
@@ -45,17 +47,18 @@ def solve_for(answer, answers, guess_pool, verbose=False):
         if not candidates:
             return MAX_TURNS + 1
         if turn < MAX_TURNS:
-            guess, _ = best_guess(guess_pool, candidates, turn + 1)
+            guess, _ = best_guess(guess_pool, candidates, turn + 1, table=table)
     return MAX_TURNS + 1
 
 
 def simulate(answer):
     answers, guess_pool = load_pools()
+    table = PatternTable(answers)
     answer = answer.strip().lower()
     if answer not in set(answers) | set(guess_pool):
         print(f"warning: '{answer}' is not in the word lists; simulating anyway.")
     print(f"Simulating against answer: {answer.upper()}")
-    n = solve_for(answer, answers, guess_pool, verbose=True)
+    n = solve_for(answer, answers, guess_pool, verbose=True, table=table)
     if n <= MAX_TURNS:
         print(f"Solved in {n} guess(es).")
     else:
@@ -64,20 +67,23 @@ def simulate(answer):
 
 def benchmark(limit=None):
     answers, guess_pool = load_pools()
+    # One table shared across every game: the ~13k pattern rows are built once
+    # (on the first game's turn-2 ranking) and reused for all the rest.
+    table = PatternTable(answers)
     targets = answers if limit is None else answers[:limit]
     total = len(targets)
     dist = Counter()
     fails = []
     sum_guesses = 0
     for i, answer in enumerate(targets, 1):
-        n = solve_for(answer, answers, guess_pool)
+        n = solve_for(answer, answers, guess_pool, table=table)
         dist[n] += 1
         if n <= MAX_TURNS:
             sum_guesses += n
         else:
             fails.append(answer)
         if i % 200 == 0:
-            print(f"  ...{i}/{total}")
+            print(f"  ...{i}/{total}", flush=True)
     solved = total - len(fails)
     print("\n--- benchmark ---")
     print(f"answers tested : {total}")
@@ -94,8 +100,9 @@ def benchmark(limit=None):
 def recompute_opening():
     """Compute the entropy-optimal opening word over the full pools."""
     answers, guess_pool = load_pools()
+    table = PatternTable(answers)
     print(f"Scoring {len(guess_pool)} guesses against {len(answers)} answers...")
-    ranked = rank_guesses(guess_pool, answers, top=10)
+    ranked = rank_guesses(guess_pool, answers, top=10, table=table)
     print("Top openers by entropy:")
     for h, c, w in ranked:
         print(f"   {w.upper()}: {h:.4f} bits{'  (possible answer)' if c else ''}")

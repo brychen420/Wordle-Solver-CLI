@@ -8,6 +8,10 @@ It chooses guesses to **maximize expected information (entropy)** on early turns
 then switches to an **endgame** mode that only guesses real possible answers when
 few candidates remain or on the final turns, to maximize the chance of winning.
 
+Benchmarked against all 2,315 NYT answers (opening with `SALET`): **100% solved
+within 6 guesses, averaging 3.43 guesses** (distribution — 2: 79, 3: 1205,
+4: 983, 5: 46, 6: 2). Reproduce with `python test_solver.py --benchmark`.
+
 ## Requirements
 
 - Python 3.8+ (standard library only — no dependencies, no `pip install`).
@@ -74,6 +78,12 @@ python test_solver.py --recompute-opening  # find the best opening word
   full allowed-guess pool — except in the endgame (≤2 candidates, or turns 5–6
   with many candidates remaining), where guesses are restricted to actual
   possible answers so the guess can win outright.
+- **Performance:** feedback patterns are packed into a single integer (0–242,
+  five base-3 digits) and cached in a `PatternTable` — the precomputed
+  `guess × answer` feedback matrix. Entropy then counts array lookups instead of
+  re-deriving patterns, so repeated full-pool ranking (the interactive solver's
+  heavy turns, and especially the benchmark) is dramatically faster. The matrix
+  is built once and reused across all games in a benchmark run.
 
 ## Data
 
