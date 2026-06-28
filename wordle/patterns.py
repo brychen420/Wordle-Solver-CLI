@@ -137,6 +137,9 @@ class PatternTable:
         Returns True on a successful load, False otherwise (caller then falls
         back to lazy / eager building). Never raises on a bad/stale cache.
         """
+        if self.guess_pool is None:
+            return False  # no guess pool to validate the cache against
+        guess_pool = self.guess_pool
         try:
             with open(path, "rb") as f:
                 if f.read(4) != _MAGIC:
@@ -145,13 +148,13 @@ class PatternTable:
                 if version != _VERSION:
                     return False
                 fp = f.read(32)
-                if fp != _fingerprint(self.answers, self.guess_pool):
+                if fp != _fingerprint(self.answers, guess_pool):
                     return False  # word lists changed -> stale cache
                 n_guess, n_ans, blob_len = struct.unpack("<III", f.read(12))
-                if n_ans != len(self.answers) or n_guess != len(self.guess_pool):
+                if n_ans != len(self.answers) or n_guess != len(guess_pool):
                     return False
                 guesses = f.read(blob_len).decode("utf-8").split("\n")
-                if guesses != self.guess_pool:
+                if guesses != guess_pool:
                     return False
                 for g in guesses:
                     r = array("B")
