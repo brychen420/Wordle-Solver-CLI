@@ -55,7 +55,8 @@ def solve_for(answer, answers, guess_pool, verbose=False, table=None):
 
 def simulate(answer):
     answers, guess_pool = load_pools()
-    table = PatternTable(answers)
+    # Pass guess_pool so the on-disk matrix cache is used (instant first move).
+    table = PatternTable(answers, guess_pool)
     answer = answer.strip().lower()
     if answer not in set(answers) | set(guess_pool):
         print(f"warning: '{answer}' is not in the word lists; simulating anyway.")
@@ -103,7 +104,8 @@ def benchmark(limit=None):
 def recompute_opening():
     """Compute the entropy-optimal opening word over the full pools."""
     answers, guess_pool = load_pools()
-    table = PatternTable(answers)
+    # Pass guess_pool so the on-disk matrix cache is used if available.
+    table = PatternTable(answers, guess_pool)
     print(f"Scoring {len(guess_pool)} guesses against {len(answers)} answers...")
     ranked = rank_guesses(guess_pool, answers, top=10, table=table)
     print("Top openers by entropy:")
