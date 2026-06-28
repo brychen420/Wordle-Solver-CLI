@@ -28,6 +28,7 @@ from .config import (
     DEFAULT_OPENING,
     MAX_TURNS,
     NUM_PATTERNS,
+    PATTERN_CACHE_FILE,
     WORD_LEN,
 )
 from .patterns import PatternTable
@@ -51,6 +52,7 @@ __all__ = [
     "DATA_DIR",
     "ANSWERS_FILE",
     "ALLOWED_FILE",
+    "PATTERN_CACHE_FILE",
     # scoring
     "score",
     "score_int",

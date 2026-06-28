@@ -51,6 +51,24 @@ Guess 2/6:  >>> BEARD <<<
   ...
 ```
 
+### Speeding up the first guess (optional)
+
+Choosing the second word requires scoring every allowed guess against every
+possible answer — a ~30-million-operation feedback matrix that takes **~35s to
+build the first time**. By default this happens lazily, so you feel it as a pause
+right after your first hint.
+
+To make the first guess instant, build the matrix once and cache it to disk:
+
+```sh
+python test_solver.py --build-matrix      # ~35s, writes data/patterns.bin (~30 MB)
+```
+
+After that, the solver loads the cache in well under a second on every run. The
+cache is keyed to the exact word lists, so it is ignored automatically (and
+rebuilt lazily) if you ever change them. The file is git-ignored and safe to
+delete.
+
 ## Tests, simulation & benchmarking
 
 Testing and evaluation live in a separate module, `test_solver.py`, which
@@ -63,6 +81,7 @@ python test_solver.py --simulate crane     # auto-play against a known answer
 python test_solver.py --benchmark          # run all answers, report stats
 python test_solver.py --benchmark 200      # benchmark the first 200 answers
 python test_solver.py --recompute-opening  # find the best opening word
+python test_solver.py --build-matrix       # cache the pattern matrix to disk
 ```
 
 ## How it works
@@ -83,7 +102,9 @@ python test_solver.py --recompute-opening  # find the best opening word
   `guess × answer` feedback matrix. Entropy then counts array lookups instead of
   re-deriving patterns, so repeated full-pool ranking (the interactive solver's
   heavy turns, and especially the benchmark) is dramatically faster. The matrix
-  is built once and reused across all games in a benchmark run.
+  is built once and reused across all games in a benchmark run, and can be
+  cached to disk (see *Speeding up the first guess*) so interactive play never
+  pays the build cost.
 
 ## Data
 

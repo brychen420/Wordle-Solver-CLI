@@ -8,5 +8,8 @@ venv/
 # Scratch / generated output
 data/benchmark.log
 
+# Precomputed pattern-matrix cache (~30 MB, regenerate with --build-matrix)
+data/patterns.bin
+
 # Harness / tooling artifacts
 .claude/

@@ -10,6 +10,7 @@ Usage:
     python test_solver.py --simulate WORD # auto-play against a known answer
     python test_solver.py --benchmark [N] # run all (or first N) answers
     python test_solver.py --recompute-opening  # find the best opening word
+    python test_solver.py --build-matrix  # cache the pattern matrix to disk
 """
 
 import sys
@@ -18,6 +19,7 @@ from collections import Counter
 from wordle import (
     DEFAULT_OPENING,
     MAX_TURNS,
+    PATTERN_CACHE_FILE,
     WORD_LEN,
     PatternTable,
     best_guess,
@@ -67,9 +69,10 @@ def simulate(answer):
 
 def benchmark(limit=None):
     answers, guess_pool = load_pools()
-    # One table shared across every game: the ~13k pattern rows are built once
-    # (on the first game's turn-2 ranking) and reused for all the rest.
-    table = PatternTable(answers)
+    # One table shared across every game. Passing guess_pool lets it load the
+    # on-disk cache if present (skipping the ~35s build); otherwise the ~13k
+    # rows are built once on the first game's turn-2 ranking and reused.
+    table = PatternTable(answers, guess_pool)
     targets = answers if limit is None else answers[:limit]
     total = len(targets)
     dist = Counter()
@@ -108,6 +111,29 @@ def recompute_opening():
         print(f"   {w.upper()}: {h:.4f} bits{'  (possible answer)' if c else ''}")
     print(f"\nBest opener: {ranked[0][2].upper()} "
           f"(set DEFAULT_OPENING in wordle_solver.py accordingly)")
+
+
+def build_matrix():
+    """Precompute the full pattern matrix and cache it to disk.
+
+    Run this once; afterwards the interactive solver loads the cache in well
+    under a second instead of spending ~35s building it on the first guess.
+    """
+    import os
+
+    answers, guess_pool = load_pools()
+    table = PatternTable(answers, guess_pool, use_cache=False)
+    print(f"Building {len(guess_pool)} x {len(answers)} pattern matrix "
+          f"(~30 MB)...")
+
+    def progress(done, total):
+        print(f"  ...{done}/{total}", flush=True)
+
+    table.build_all(progress=progress)
+    table.save_cache()
+    size_mb = os.path.getsize(PATTERN_CACHE_FILE) / (1024 * 1024)
+    print(f"Saved cache to {PATTERN_CACHE_FILE} ({size_mb:.1f} MB).")
+    print("The interactive solver will now load it instead of rebuilding.")
 
 
 # --------------------------------------------------------------------------- #
@@ -188,6 +214,9 @@ def main(argv):
         return
     if cmd == "--recompute-opening":
         recompute_opening()
+        return
+    if cmd == "--build-matrix":
+        build_matrix()
         return
     if cmd in ("-h", "--help"):
         print(__doc__)

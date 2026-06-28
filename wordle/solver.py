@@ -146,7 +146,10 @@ class Solver:
             answers, guess_pool = load_pools()
         self.answers = list(answers)
         self.guess_pool = guess_pool
-        self.table = table if table is not None else PatternTable(self.answers)
+        # Passing guess_pool lets the table load the on-disk matrix cache (if
+        # present and in sync), making the first guess instant instead of ~35s.
+        self.table = (table if table is not None
+                      else PatternTable(self.answers, self.guess_pool))
         self.candidates = list(self.answers)
         self.opening = opening
         self.turn = 1
