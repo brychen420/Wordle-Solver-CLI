@@ -111,8 +111,14 @@ python test_solver.py --build-matrix       # cache the pattern matrix to disk
 - `data/answers.txt` — the NYT answer list (the possible-answer pool).
 - `data/allowed.txt` — additional accepted guesses (guessable but never answers).
 
-Sourced from the canonical Wordle word-list gists by cfreshman. The solver only
-reads these local files, so it runs fully offline.
+Sourced from the canonical Wordle word-list gists by
+[cfreshman](https://gist.github.com/cfreshman):
+
+- Answers — <https://gist.github.com/cfreshman/a03ef2cba789d8cf00c08f767e0fad7b>
+- Allowed guesses (excluding answers) —
+  <https://gist.github.com/cfreshman/cdcdf777450c5b5301e439061d29694c>
+
+The solver only reads these local files, so it runs fully offline.
 
 The default opening word is `SALET` (the entropy-optimal opener for this list),
 set in `wordle/config.py` so the first turn is instant. Run
