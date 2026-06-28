@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Tests, simulation, and benchmarking for the Wordle solver.
 
-Kept separate from wordle_solver.py so the solver module stays focused on the
-engine and interactive CLI. This file imports the engine and exercises it.
+Kept separate from the `wordle` package so the engine stays focused on the
+solver and interactive CLI. This file imports the package and exercises it.
 
 Usage:
     python test_solver.py                 # run self-checks (default)
@@ -15,7 +15,7 @@ Usage:
 import sys
 from collections import Counter
 
-from wordle_solver import (
+from wordle import (
     DEFAULT_OPENING,
     MAX_TURNS,
     WORD_LEN,

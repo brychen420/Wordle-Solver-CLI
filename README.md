@@ -94,15 +94,35 @@ Sourced from the canonical Wordle word-list gists by cfreshman. The solver only
 reads these local files, so it runs fully offline.
 
 The default opening word is `SALET` (the entropy-optimal opener for this list),
-hardcoded in `wordle_solver.py` so the first turn is instant. Run
+set in `wordle/config.py` so the first turn is instant. Run
 `python test_solver.py --recompute-opening` to regenerate it if you change the
 word lists.
 
-## Files
+## Project layout
 
-| File               | Purpose                                            |
-|--------------------|----------------------------------------------------|
-| `wordle_solver.py` | Solver engine + interactive CLI                    |
-| `test_solver.py`   | Self-checks, simulation, benchmarking              |
-| `data/answers.txt` | NYT answer list (possible-answer pool)             |
-| `data/allowed.txt` | Additional accepted guesses                        |
+The engine is a small package split by concern; `wordle_solver.py` is just an
+entrypoint:
+
+| Path                 | Purpose                                              |
+|----------------------|------------------------------------------------------|
+| `wordle_solver.py`   | Thin entrypoint → `wordle.cli.main`                  |
+| `wordle/config.py`   | Constants and data-file paths                        |
+| `wordle/scoring.py`  | `score` / `score_int` and pattern↔string conversions |
+| `wordle/patterns.py` | `PatternTable` (the precomputed feedback matrix)     |
+| `wordle/words.py`    | Word-list loading and hint validation                |
+| `wordle/solver.py`   | Entropy strategy + the stateful `Solver` class       |
+| `wordle/cli.py`      | Interactive command-line interface                   |
+| `test_solver.py`     | Self-checks, simulation, benchmarking                |
+| `data/answers.txt`   | NYT answer list (possible-answer pool)               |
+| `data/allowed.txt`   | Additional accepted guesses                          |
+
+### Using the solver as a library
+
+```python
+from wordle import Solver
+
+solver = Solver()
+print(solver.suggest())          # 'salet' (the opening word)
+result = solver.apply_hint('01010')
+print(result.next_guess, result.remaining)
+```
