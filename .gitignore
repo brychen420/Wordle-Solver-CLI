@@ -6,10 +6,11 @@ __pycache__/
 venv/
 
 # Scratch / generated output
-data/benchmark.log
+data/benchmark*.log
 
-# Precomputed pattern-matrix cache (~30 MB, regenerate with --build-matrix)
+# Precomputed pattern-matrix caches (regenerate with --build-matrix)
 data/patterns.bin
+data/patterns_full.bin
 
 # Harness / tooling artifacts
 .claude/

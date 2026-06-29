@@ -11,6 +11,8 @@ Usage:
     python test_solver.py --benchmark [N] # run all (or first N) answers
     python test_solver.py --recompute-opening  # find the best opening word
     python test_solver.py --build-matrix  # cache the pattern matrix to disk
+    python test_solver.py --build-matrix --full  # cache the full-pool matrix
+    python test_solver.py --benchmark --full     # benchmark the full-pool variant
 """
 
 import sys
@@ -20,6 +22,7 @@ from wordle import (
     DEFAULT_OPENING,
     MAX_TURNS,
     PATTERN_CACHE_FILE,
+    PATTERN_CACHE_FULL_FILE,
     WORD_LEN,
     PatternTable,
     best_guess,
@@ -68,13 +71,26 @@ def simulate(answer):
         print("Failed to solve within 6 guesses.")
 
 
-def benchmark(limit=None):
-    answers, guess_pool = load_pools()
-    # One table shared across every game. Passing guess_pool lets it load the
-    # on-disk cache if present (skipping the ~35s build); otherwise the ~13k
+def benchmark(limit=None, full_pool=False):
+    """Benchmark the solver over the real NYT answers.
+
+    With `full_pool`, the solver's candidate pool is widened to the entire
+    ~13k guess pool (a harder, less-informed assumption), but the *targets* are
+    still the real ~2.3k answers -- those are the only words that can actually
+    be the hidden word, so this measures play quality on realistic puzzles.
+    """
+    answers, guess_pool = load_pools(full_pool=full_pool)
+    cache = PATTERN_CACHE_FULL_FILE if full_pool else PATTERN_CACHE_FILE
+    # One table shared across every game. Passing guess_pool + cache_path lets
+    # it load the right on-disk cache if present (skipping the build); otherwise
     # rows are built once on the first game's turn-2 ranking and reused.
-    table = PatternTable(answers, guess_pool)
-    targets = answers if limit is None else answers[:limit]
+    table = PatternTable(answers, guess_pool, cache_path=cache)
+    if not table._rows:  # cache miss -> warn, since the full build is slow
+        print(f"(no cache at {cache}; building rows lazily -- this is slow)")
+
+    # Targets are always the real answers, even in full-pool mode.
+    real_answers, _ = load_pools(full_pool=False)
+    targets = real_answers if limit is None else real_answers[:limit]
     total = len(targets)
     dist = Counter()
     fails = []
@@ -90,6 +106,7 @@ def benchmark(limit=None):
             print(f"  ...{i}/{total}", flush=True)
     solved = total - len(fails)
     print("\n--- benchmark ---")
+    print(f"mode           : {'FULL POOL (~13k candidates)' if full_pool else 'normal (curated answers)'}")
     print(f"answers tested : {total}")
     print(f"solved <= 6    : {solved} ({100 * solved / total:.2f}%)")
     avg = sum_guesses / solved if solved else 0
@@ -115,27 +132,32 @@ def recompute_opening():
           f"(set DEFAULT_OPENING in wordle_solver.py accordingly)")
 
 
-def build_matrix():
-    """Precompute the full pattern matrix and cache it to disk.
+def build_matrix(full_pool=False):
+    """Precompute the pattern matrix and cache it to disk.
 
-    Run this once; afterwards the interactive solver loads the cache in well
-    under a second instead of spending ~35s building it on the first guess.
+    Run this once; afterwards the solver loads the cache in well under a second
+    instead of spending ~35s (normal) or ~3.5min (full pool) building it.
+
+    With `full_pool`, the answer axis is the entire ~13k guess pool, producing
+    a ~165 MB matrix saved to a separate file.
     """
     import os
 
-    answers, guess_pool = load_pools()
-    table = PatternTable(answers, guess_pool, use_cache=False)
+    answers, guess_pool = load_pools(full_pool=full_pool)
+    path = PATTERN_CACHE_FULL_FILE if full_pool else PATTERN_CACHE_FILE
+    table = PatternTable(answers, guess_pool, use_cache=False, cache_path=path)
+    approx = "~165 MB" if full_pool else "~30 MB"
     print(f"Building {len(guess_pool)} x {len(answers)} pattern matrix "
-          f"(~30 MB)...")
+          f"({approx})...")
 
     def progress(done, total):
         print(f"  ...{done}/{total}", flush=True)
 
     table.build_all(progress=progress)
-    table.save_cache()
-    size_mb = os.path.getsize(PATTERN_CACHE_FILE) / (1024 * 1024)
-    print(f"Saved cache to {PATTERN_CACHE_FILE} ({size_mb:.1f} MB).")
-    print("The interactive solver will now load it instead of rebuilding.")
+    table.save_cache(path)
+    size_mb = os.path.getsize(path) / (1024 * 1024)
+    print(f"Saved cache to {path} ({size_mb:.1f} MB).")
+    print("The solver will now load it instead of rebuilding.")
 
 
 # --------------------------------------------------------------------------- #
@@ -201,6 +223,11 @@ def run_tests():
 # CLI                                                                          #
 # --------------------------------------------------------------------------- #
 def main(argv):
+    # --full is a modifier (for --benchmark / --build-matrix); pull it out so
+    # it doesn't interfere with positional parsing.
+    full = "--full" in argv
+    argv = [a for a in argv if a != "--full"]
+
     cmd = argv[1] if len(argv) >= 2 else "--test"
     if cmd == "--test":
         sys.exit(0 if run_tests() else 1)
@@ -212,13 +239,13 @@ def main(argv):
         return
     if cmd == "--benchmark":
         limit = int(argv[2]) if len(argv) >= 3 else None
-        benchmark(limit)
+        benchmark(limit, full_pool=full)
         return
     if cmd == "--recompute-opening":
         recompute_opening()
         return
     if cmd == "--build-matrix":
-        build_matrix()
+        build_matrix(full_pool=full)
         return
     if cmd in ("-h", "--help"):
         print(__doc__)
