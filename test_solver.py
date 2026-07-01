@@ -8,6 +8,7 @@ Usage:
     python test_solver.py                 # run self-checks (default)
     python test_solver.py --test          # run self-checks
     python test_solver.py --simulate WORD # auto-play against a known answer
+    python test_solver.py --simulate WORD --wide  # start against the full pool
     python test_solver.py --benchmark [N] # run all (or first N) answers
     python test_solver.py --recompute-opening  # find the best opening word
     python test_solver.py --build-matrix  # cache the pattern matrix to disk
@@ -25,6 +26,7 @@ from wordle import (
     PATTERN_CACHE_FULL_FILE,
     WORD_LEN,
     PatternTable,
+    Solver,
     best_guess,
     filter_candidates,
     load_pools,
@@ -56,17 +58,49 @@ def solve_for(answer, answers, guess_pool, verbose=False, table=None):
     return MAX_TURNS + 1
 
 
-def simulate(answer):
-    answers, guess_pool = load_pools()
-    # Pass guess_pool so the on-disk matrix cache is used (instant first move).
-    table = PatternTable(answers, guess_pool)
+def simulate(answer, wide=False):
+    """Auto-play the real Solver against a known answer, printing each turn.
+
+    Drives the stateful `Solver` (not the standalone `solve_for`) so the run
+    reflects exactly what the interactive CLI would do -- including the
+    automatic mid-game widening to the full allowed pool when the curated
+    candidates run out. With `wide=True`, the solver starts against the full
+    ~13k pool from turn 1 (like `wordle_solver.py --wide`).
+    """
     answer = answer.strip().lower()
+
+    if wide:
+        answers, guess_pool = load_pools(full_pool=True)
+        solver = Solver(answers, guess_pool, cache_path=PATTERN_CACHE_FULL_FILE)
+    else:
+        answers, guess_pool = load_pools()
+        solver = Solver(answers, guess_pool)
+
     if answer not in set(answers) | set(guess_pool):
         print(f"warning: '{answer}' is not in the word lists; simulating anyway.")
-    print(f"Simulating against answer: {answer.upper()}")
-    n = solve_for(answer, answers, guess_pool, verbose=True, table=table)
-    if n <= MAX_TURNS:
-        print(f"Solved in {n} guess(es).")
+    mode = " (wide pool)" if wide else ""
+    print(f"Simulating against answer: {answer.upper()}{mode}")
+
+    solved_in = None
+    for turn in range(1, MAX_TURNS + 1):
+        guess = solver.suggest()
+        code = score(guess, answer)
+        print(f"  guess {turn}: {guess.upper()} -> {code}")
+        if code == "2" * WORD_LEN:
+            solved_in = turn
+            break
+        result = solver.apply_hint(code)
+        if result.widened:
+            print("  [widening the search to the full allowed-word list]")
+        if result.empty:
+            print("  ! no words match the hints, even in the full pool "
+                  "(inconsistent hints?)")
+            break
+        if result.exhausted:
+            break
+
+    if solved_in is not None:
+        print(f"Solved in {solved_in} guess(es).")
     else:
         print("Failed to solve within 6 guesses.")
 
@@ -215,6 +249,53 @@ def run_tests():
             n = solve_for(w, answers, guess_pool)
             check(n <= MAX_TURNS, f"solves '{w}' in {n} guesses")
 
+    # Wide pool: an allowed-only word (e.g. 'maven') is guessable but is NOT a
+    # curated answer, so normal mode can't solve for it -- the --wide pool can.
+    answers_w, guess_pool_w = load_pools(full_pool=True)
+    allowed_only = "maven"
+    check(allowed_only not in set(answers),
+          f"curated pool excludes allowed-only word '{allowed_only}'")
+    check(allowed_only in set(answers_w),
+          f"wide pool includes allowed-only word '{allowed_only}'")
+    # End-to-end in wide mode (table-free path -> fast, no full cache needed).
+    n = solve_for(allowed_only, answers_w, guess_pool_w)
+    check(n <= MAX_TURNS, f"wide mode solves '{allowed_only}' in {n} guesses")
+
+    # Mid-game recovery: a *default* Solver (curated pool) must widen on its own
+    # when the curated candidates run out, then still solve the allowed-only
+    # answer -- keeping the hints already entered instead of restarting.
+    solver = Solver()
+    widened_at = None
+    solved_in = None
+    for turn in range(1, MAX_TURNS + 1):
+        g = solver.suggest()
+        code = score(g, allowed_only)
+        if code == "2" * WORD_LEN:
+            solved_in = turn
+            break
+        r = solver.apply_hint(code)
+        if r.widened:
+            widened_at = turn
+        if r.empty:
+            break
+    check(widened_at is not None,
+          f"default Solver auto-widens on '{allowed_only}' (turn {widened_at})")
+    check(solved_in is not None and solved_in <= MAX_TURNS,
+          f"default Solver recovers and solves '{allowed_only}' in {solved_in}")
+    # A normal curated answer must never trigger widening (regression guard).
+    solver = Solver()
+    triggered = False
+    for _ in range(MAX_TURNS):
+        g = solver.suggest()
+        code = score(g, "crane")
+        if code == "2" * WORD_LEN:
+            break
+        r = solver.apply_hint(code)
+        triggered = triggered or r.widened
+        if r.terminal:
+            break
+    check(not triggered, "normal answer 'crane' never triggers widening")
+
     print(f"\n{'all tests passed' if failures == 0 else f'{failures} test(s) FAILED'}")
     return failures == 0
 
@@ -223,19 +304,20 @@ def run_tests():
 # CLI                                                                          #
 # --------------------------------------------------------------------------- #
 def main(argv):
-    # --full is a modifier (for --benchmark / --build-matrix); pull it out so
-    # it doesn't interfere with positional parsing.
+    # --full (--benchmark/--build-matrix) and --wide (--simulate) are modifiers;
+    # pull them out so they don't interfere with positional parsing.
     full = "--full" in argv
-    argv = [a for a in argv if a != "--full"]
+    wide = "--wide" in argv
+    argv = [a for a in argv if a not in ("--full", "--wide")]
 
     cmd = argv[1] if len(argv) >= 2 else "--test"
     if cmd == "--test":
         sys.exit(0 if run_tests() else 1)
     if cmd == "--simulate":
         if len(argv) < 3:
-            print("usage: test_solver.py --simulate WORD")
+            print("usage: test_solver.py --simulate WORD [--wide]")
             sys.exit(2)
-        simulate(argv[2])
+        simulate(argv[2], wide=wide)
         return
     if cmd == "--benchmark":
         limit = int(argv[2]) if len(argv) >= 3 else None

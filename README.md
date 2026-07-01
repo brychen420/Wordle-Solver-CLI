@@ -38,6 +38,21 @@ Yellow · Gray · Gray · Green · Yellow → type `10021`.
 
 Enter `22222` when you win, or `q` to quit.
 
+**Rare answers:** the curated NYT answer list (`data/answers.txt`) occasionally
+omits a word the game actually uses that day — one that lives only in the
+larger allowed-guess list. When the curated candidates run out mid-game, the
+solver **automatically widens** its search to the full ~13k allowed pool,
+replaying the hints you've already entered, and continues from there (it tells
+you when this happens). No restart needed.
+
+The wider pool is less informed, so guesses after widening may be slightly
+weaker. If you already know the answer is an obscure word, you can start in wide
+mode from the first guess:
+
+```sh
+python wordle_solver.py --wide
+```
+
 ### Sample session
 
 ```
@@ -78,11 +93,17 @@ imports the solver engine:
 python test_solver.py                      # run self-checks (default)
 python test_solver.py --test               # run self-checks
 python test_solver.py --simulate crane     # auto-play against a known answer
+python test_solver.py --simulate maven --wide  # ...starting from the full pool
 python test_solver.py --benchmark          # run all answers, report stats
 python test_solver.py --benchmark 200      # benchmark the first 200 answers
 python test_solver.py --recompute-opening  # find the best opening word
 python test_solver.py --build-matrix       # cache the pattern matrix to disk
 ```
+
+`--simulate` drives the same stateful solver as the interactive CLI, so it also
+**auto-widens to the full allowed pool** when the curated candidates run out —
+letting you replay a puzzle whose answer is an allowed-only word (e.g. `maven`).
+Add `--wide` to start from the full pool on turn 1 instead.
 
 ## How it works
 
