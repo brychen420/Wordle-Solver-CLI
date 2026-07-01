@@ -12,6 +12,16 @@ Benchmarked against all 2,315 NYT answers (opening with `SALET`): **100% solved
 within 6 guesses, averaging 3.43 guesses** (distribution — 2: 79, 3: 1205,
 4: 983, 5: 46, 6: 2). Reproduce with `python test_solver.py --benchmark`.
 
+**Full-pool stress test.** With `--wide`, the solver treats *every* one of the
+~13k allowed words as a possible answer — both searching over and being graded
+on the entire guess pool, a much harder and less-informed problem than real NYT
+play. Over all **12,972** words: **99.33% solved within 6 guesses, averaging
+4.08 guesses** (distribution — 1: 1, 2: 54, 3: 2292, 4: 7366, 5: 2952, 6: 220;
+87 unsolved, e.g. `babes`, `boozy`, `coxed`). The lower solve rate is expected:
+without the curated answer list as a prior, near-anagram clusters of rare words
+(`dozed`/`dozes`, `eases`/`eaved`) can't be separated within six guesses.
+Reproduce with `python test_solver.py --benchmark --wide`.
+
 ## Requirements
 
 - Python 3.8+ (standard library only — no dependencies, no `pip install`).
@@ -84,7 +94,7 @@ You can also build the cache ahead of time without playing:
 
 ```sh
 python test_solver.py --build-matrix          # writes data/patterns.bin
-python test_solver.py --build-matrix --full   # writes data/patterns_full.bin (~165 MB)
+python test_solver.py --build-matrix --wide   # writes data/patterns_full.bin (~165 MB)
 ```
 
 ## Tests, simulation & benchmarking
