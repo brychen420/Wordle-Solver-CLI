@@ -135,6 +135,32 @@ class PatternTable:
             for g in self.guess_pool:
                 self._rows[g].tofile(f)
 
+    def ensure_cached(self, path=None, progress=None):
+        """Build every row and persist the matrix to disk if not already cached.
+
+        A no-op when the rows are already populated (loaded from a fresh disk
+        cache). Otherwise builds the full matrix -- the ~35s (normal) or ~3.5min
+        (full-pool) computation -- and writes it to `path` so later runs load it
+        instantly. Returns True if a file was written, False if nothing needed
+        doing or the write failed (e.g. a read-only directory); a failed write
+        is non-fatal since the in-memory rows are still usable this run.
+        """
+        if path is None:
+            path = self.cache_path
+        if self.guess_pool is None:
+            return False
+        if self._rows:
+            return False  # already have the matrix (cache hit) -- nothing to do
+        # Build the matrix in memory first (with progress), then try to persist.
+        self.build_all(progress=progress)
+        try:
+            self.save_cache(path)  # rows already built, so this just writes
+            return True
+        except OSError:
+            # Couldn't write (permissions, disk full, ...). The in-memory rows
+            # are still usable this run; we just won't persist for next time.
+            return False
+
     def load_cache(self, path=None):
         """Populate rows from the disk cache if it exists and is in sync.
 

@@ -66,23 +66,26 @@ Guess 2/6:  >>> BEARD <<<
   ...
 ```
 
-### Speeding up the first guess (optional)
+### The feedback matrix (built automatically on first run)
 
-Choosing the second word requires scoring every allowed guess against every
-possible answer — a ~30-million-operation feedback matrix that takes **~35s to
-build the first time**. By default this happens lazily, so you feel it as a pause
-right after your first hint.
+Choosing each guess requires scoring every allowed guess against every possible
+answer — a ~30-million-operation feedback matrix that takes **~35s to build the
+first time** (~3.5 min for `--wide`, which is ~5× larger).
 
-To make the first guess instant, build the matrix once and cache it to disk:
+The **first time you run the solver on a fresh clone**, it builds this matrix
+once — showing a progress bar up front — and caches it to disk
+(`data/patterns.bin`, ~30 MB; `data/patterns_full.bin`, ~165 MB for `--wide`).
+Every run after that loads the cache in well under a second, so you never wait
+again. The cache is keyed to the exact word lists, so it is rebuilt
+automatically if you ever change them. The files are git-ignored and safe to
+delete (they just rebuild on the next run).
+
+You can also build the cache ahead of time without playing:
 
 ```sh
-python test_solver.py --build-matrix      # ~35s, writes data/patterns.bin (~30 MB)
+python test_solver.py --build-matrix          # writes data/patterns.bin
+python test_solver.py --build-matrix --full   # writes data/patterns_full.bin (~165 MB)
 ```
-
-After that, the solver loads the cache in well under a second on every run. The
-cache is keyed to the exact word lists, so it is ignored automatically (and
-rebuilt lazily) if you ever change them. The file is git-ignored and safe to
-delete.
 
 ## Tests, simulation & benchmarking
 
