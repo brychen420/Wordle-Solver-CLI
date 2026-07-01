@@ -12,8 +12,8 @@ Usage:
     python test_solver.py --benchmark [N] # run all (or first N) answers
     python test_solver.py --recompute-opening  # find the best opening word
     python test_solver.py --build-matrix  # cache the pattern matrix to disk
-    python test_solver.py --build-matrix --full  # cache the full-pool matrix
-    python test_solver.py --benchmark --full     # benchmark the full-pool variant
+    python test_solver.py --build-matrix --wide  # cache the full-pool matrix
+    python test_solver.py --benchmark --wide     # benchmark the full-pool variant
 """
 
 import sys
@@ -106,12 +106,13 @@ def simulate(answer, wide=False):
 
 
 def benchmark(limit=None, full_pool=False):
-    """Benchmark the solver over the real NYT answers.
+    """Benchmark the solver over its target pool.
 
-    With `full_pool`, the solver's candidate pool is widened to the entire
-    ~13k guess pool (a harder, less-informed assumption), but the *targets* are
-    still the real ~2.3k answers -- those are the only words that can actually
-    be the hidden word, so this measures play quality on realistic puzzles.
+    In normal mode the candidate pool and the targets are the curated ~2.3k NYT
+    answers. With `full_pool`, both are widened to the entire ~13k guess pool:
+    the solver both searches over and is graded on every allowed word, treating
+    any of them as a possible hidden answer -- a much harder, less-informed
+    stress test than realistic NYT play.
     """
     answers, guess_pool = load_pools(full_pool=full_pool)
     cache = PATTERN_CACHE_FULL_FILE if full_pool else PATTERN_CACHE_FILE
@@ -122,9 +123,9 @@ def benchmark(limit=None, full_pool=False):
     if not table._rows:  # cache miss -> warn, since the full build is slow
         print(f"(no cache at {cache}; building rows lazily -- this is slow)")
 
-    # Targets are always the real answers, even in full-pool mode.
-    real_answers, _ = load_pools(full_pool=False)
-    targets = real_answers if limit is None else real_answers[:limit]
+    # Targets are every word the solver treats as possible: the ~13k guess pool
+    # in full-pool mode, the curated ~2.3k answers otherwise.
+    targets = answers if limit is None else answers[:limit]
     total = len(targets)
     dist = Counter()
     fails = []
@@ -304,11 +305,12 @@ def run_tests():
 # CLI                                                                          #
 # --------------------------------------------------------------------------- #
 def main(argv):
-    # --full (--benchmark/--build-matrix) and --wide (--simulate) are modifiers;
-    # pull them out so they don't interfere with positional parsing.
-    full = "--full" in argv
-    wide = "--wide" in argv
-    argv = [a for a in argv if a not in ("--full", "--wide")]
+    # --wide is the pool-widening modifier for --simulate/--benchmark/
+    # --build-matrix. `--full` is a hidden, deprecated alias (the old name)
+    # kept working so existing commands don't break. Pull it out before
+    # positional parsing.
+    wide = "--wide" in argv or "--full" in argv
+    argv = [a for a in argv if a not in ("--wide", "--full")]
 
     cmd = argv[1] if len(argv) >= 2 else "--test"
     if cmd == "--test":
@@ -321,13 +323,13 @@ def main(argv):
         return
     if cmd == "--benchmark":
         limit = int(argv[2]) if len(argv) >= 3 else None
-        benchmark(limit, full_pool=full)
+        benchmark(limit, full_pool=wide)
         return
     if cmd == "--recompute-opening":
         recompute_opening()
         return
     if cmd == "--build-matrix":
-        build_matrix(full_pool=full)
+        build_matrix(full_pool=wide)
         return
     if cmd in ("-h", "--help"):
         print(__doc__)
