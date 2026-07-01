@@ -39,12 +39,36 @@ def _read_hint():
         print("  ! Enter exactly 5 digits, each 0/1/2.")
 
 
+def _ensure_matrix_cached(solver, wide):
+    """Build and persist the pattern matrix if this clone has no cache yet.
+
+    On a fresh checkout the .bin caches don't exist (they're git-ignored), so
+    the matrix would otherwise be rebuilt in memory every run and cost a pause
+    on the first hint. Build it once up front, with a progress bar, and save it
+    so every later run -- and the rest of this game -- loads instantly.
+    """
+    if solver.table._rows:
+        return  # cache already loaded from disk -- nothing to do
+    approx = "~3.5 min" if wide else "~35s"
+    print(f"First run: building the guess/answer matrix ({approx}); this is")
+    print("cached to disk so future runs start instantly...")
+
+    def progress(done, total):
+        print(f"  ...{done}/{total}", flush=True)
+
+    saved = solver.table.ensure_cached(progress=progress)
+    print("  matrix ready" + (" and cached." if saved
+                              else " (couldn't write cache; will rebuild next run)."))
+
+
 def play_interactive(wide=False):
     if wide:
         answers, guess_pool = load_pools(full_pool=True)
         solver = Solver(answers, guess_pool, cache_path=PATTERN_CACHE_FULL_FILE)
     else:
         solver = Solver()
+
+    _ensure_matrix_cached(solver, wide)
 
     print("=" * 56)
     print(" Wordle solver  --  NYT edition")
