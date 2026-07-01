@@ -9,7 +9,7 @@ to calling the functions directly.
 import math
 from collections import defaultdict
 
-from .config import DEFAULT_OPENING, MAX_TURNS
+from .config import DEFAULT_OPENING, MAX_TURNS, PATTERN_CACHE_FILE
 from .patterns import PatternTable
 from .scoring import score_int, str_to_code
 from .words import load_pools
@@ -117,7 +117,8 @@ class HintResult:
     """
 
     def __init__(self, solved=False, empty=False, exhausted=False,
-                 next_guess=None, ranked=None, remaining=0, candidates=None):
+                 next_guess=None, ranked=None, remaining=0, candidates=None,
+                 widened=False):
         self.solved = solved
         self.empty = empty
         self.exhausted = exhausted
@@ -125,6 +126,9 @@ class HintResult:
         self.ranked = ranked or []
         self.remaining = remaining
         self.candidates = candidates or []
+        # True on the turn the candidate pool was widened from the curated
+        # answers to the full guess pool (a rare mid-game recovery).
+        self.widened = widened
 
     @property
     def terminal(self):
@@ -141,23 +145,42 @@ class Solver:
     """
 
     def __init__(self, answers=None, guess_pool=None, opening=DEFAULT_OPENING,
-                 table=None):
+                 table=None, cache_path=PATTERN_CACHE_FILE):
         if answers is None or guess_pool is None:
             answers, guess_pool = load_pools()
         self.answers = list(answers)
         self.guess_pool = guess_pool
         # Passing guess_pool lets the table load the on-disk matrix cache (if
         # present and in sync), making the first guess instant instead of ~35s.
+        # cache_path selects which cache to load (normal vs full-pool), matching
+        # how test_solver.benchmark() picks it.
         self.table = (table if table is not None
-                      else PatternTable(self.answers, self.guess_pool))
+                      else PatternTable(self.answers, self.guess_pool,
+                                        cache_path=cache_path))
         self.candidates = list(self.answers)
         self.opening = opening
         self.turn = 1
         self.current_guess = opening
+        # (guess, code) pairs applied so far, so we can replay every hint
+        # against the wider pool if the curated candidates ever run out.
+        self.history = []
+        self.widened = False
 
     def suggest(self):
         """Return the guess to play on the current turn."""
         return self.current_guess
+
+    def _widen_candidates(self):
+        """Re-derive candidates from the full guess pool by replaying all hints.
+
+        Called once, when the curated-answer candidate set is exhausted but the
+        real answer might still be an allowed-only word (in the guess pool but
+        not the curated list). Reuses the same filtering as normal play.
+        """
+        cands = list(self.guess_pool)
+        for g, c in self.history:
+            cands = filter_candidates(cands, g, c)
+        return cands
 
     def apply_hint(self, code):
         """Record the hint for the current guess and advance the game.
@@ -170,19 +193,35 @@ class Solver:
         if code == "2" * len(code):
             return HintResult(solved=True)
 
+        # Record the hint (before filtering) so a later widen can replay it.
+        self.history.append((guess, code))
+
         # Narrow the candidate set with this hint.
         self.candidates = filter_candidates(self.candidates, guess, code)
+
+        # Curated pool exhausted -> widen to the full guess pool once, so a rare
+        # answer that lives only in the allowed list stays solvable.
+        just_widened = False
+        if not self.candidates and not self.widened:
+            self.candidates = self._widen_candidates()
+            self.widened = True
+            just_widened = True
+
         if not self.candidates:
             return HintResult(empty=True)
 
         if self.turn >= MAX_TURNS:
-            return HintResult(exhausted=True, candidates=self.candidates)
+            return HintResult(exhausted=True, candidates=self.candidates,
+                              widened=just_widened)
 
         # Choose the guess for the next turn (first full-pool ranking builds the
-        # PatternTable rows).
+        # PatternTable rows). Once widened, candidates can include allowed-only
+        # words that aren't on the table's (curated) answer axis, so drop the
+        # table and use the table-free ranking path to avoid a KeyError.
         next_turn = self.turn + 1
+        table = None if self.widened else self.table
         next_guess, ranked = best_guess(
-            self.guess_pool, self.candidates, next_turn, table=self.table
+            self.guess_pool, self.candidates, next_turn, table=table
         )
         self.turn = next_turn
         self.current_guess = next_guess
@@ -191,4 +230,5 @@ class Solver:
             ranked=ranked,
             remaining=len(self.candidates),
             candidates=self.candidates,
+            widened=just_widened,
         )

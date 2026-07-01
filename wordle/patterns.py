@@ -43,12 +43,14 @@ class PatternTable:
     Once a row exists, entropy is pure array lookups + counting.
     """
 
-    def __init__(self, answers, guess_pool=None, use_cache=True):
+    def __init__(self, answers, guess_pool=None, use_cache=True,
+                 cache_path=PATTERN_CACHE_FILE):
         # The answer axis is fixed: entropy is always measured over candidates,
         # which are a subset of the answer pool. We index answers by position.
         self.answers = list(answers)
         self.answer_id = {w: i for i, w in enumerate(self.answers)}
         self.guess_pool = list(guess_pool) if guess_pool is not None else None
+        self.cache_path = cache_path  # which on-disk cache this table uses
         self._rows = {}  # guess word -> array('B') of patterns vs each answer
         self._scratch = [0] * NUM_PATTERNS  # reusable bucket counts for entropy
 
@@ -111,8 +113,10 @@ class PatternTable:
         return h
 
     # --- disk cache ------------------------------------------------------- #
-    def save_cache(self, path=PATTERN_CACHE_FILE):
+    def save_cache(self, path=None):
         """Write the full matrix to disk. Builds any missing rows first."""
+        if path is None:
+            path = self.cache_path
         if self.guess_pool is None:
             raise ValueError("save_cache requires a guess_pool")
         self.build_all()
@@ -131,7 +135,7 @@ class PatternTable:
             for g in self.guess_pool:
                 self._rows[g].tofile(f)
 
-    def load_cache(self, path=PATTERN_CACHE_FILE):
+    def load_cache(self, path=None):
         """Populate rows from the disk cache if it exists and is in sync.
 
         Returns True on a successful load, False otherwise (caller then falls
@@ -139,6 +143,8 @@ class PatternTable:
         """
         if self.guess_pool is None:
             return False  # no guess pool to validate the cache against
+        if path is None:
+            path = self.cache_path
         guess_pool = self.guess_pool
         try:
             with open(path, "rb") as f:

@@ -3,12 +3,15 @@
 import sys
 
 from . import __doc__ as PACKAGE_DOC
-from .config import MAX_TURNS
+from .config import MAX_TURNS, PATTERN_CACHE_FULL_FILE
 from .solver import Solver
-from .words import valid_code
+from .words import load_pools, valid_code
 
 HELP = """Usage:
-  python wordle_solver.py        run the interactive solver
+  python wordle_solver.py          run the interactive solver
+  python wordle_solver.py --wide   widen the candidate pool to all ~13k allowed
+                                   words (for rare answers outside the curated
+                                   NYT list; guesses may be slightly weaker)
 
 Tests, simulation, and benchmarking live in test_solver.py:
   python test_solver.py --test
@@ -36,11 +39,19 @@ def _read_hint():
         print("  ! Enter exactly 5 digits, each 0/1/2.")
 
 
-def play_interactive():
-    solver = Solver()
+def play_interactive(wide=False):
+    if wide:
+        answers, guess_pool = load_pools(full_pool=True)
+        solver = Solver(answers, guess_pool, cache_path=PATTERN_CACHE_FULL_FILE)
+    else:
+        solver = Solver()
 
     print("=" * 56)
     print(" Wordle solver  --  NYT edition")
+    if wide:
+        print(" [WIDE MODE] Candidate pool = all ~13k allowed words.")
+        print(" Use this when the answer isn't a common NYT word; guesses")
+        print(" may be a little weaker than in normal mode.")
     print(" Enter the hint after each guess as a 5-digit code:")
     print("   0 = gray (absent)   1 = yellow (wrong spot)   2 = green")
     print("   e.g. GUCKS -> Yellow Gray Gray Green Yellow -> 10021")
@@ -62,10 +73,17 @@ def play_interactive():
             return
 
         if result.empty:
-            print("\n  ! No words match all hints so far.")
-            print("  ! A previous hint may have a typo, or the answer isn't in")
-            print("    the bundled list. Restart and double-check your hints.")
+            print("\n  ! No words match all hints so far -- even against the")
+            print("    full allowed-word list. A previous hint likely has a")
+            print("    typo; restart and double-check your hints.")
             return
+
+        # The curated pool ran out but the answer may be an allowed-only word;
+        # the solver just widened the search. Let the user know why the pool
+        # (and the suggested guesses) suddenly changed.
+        if result.widened:
+            print("\n  (No curated NYT answer matched -- widening the search to")
+            print("   the full ~13k allowed-word list. Guesses may be weaker.)")
 
         if result.exhausted:
             print("\n  Out of guesses. Remaining possibilities:")
@@ -83,12 +101,16 @@ def play_interactive():
 
 
 def main(argv):
-    if len(argv) >= 2:
-        cmd = argv[1]
+    # --wide is a modifier for interactive play; pull it out before parsing the
+    # rest (mirrors how test_solver.main handles --full).
+    wide = "--wide" in argv
+    rest = [a for a in argv[1:] if a != "--wide"]
+    if rest:
+        cmd = rest[0]
         if cmd in ("-h", "--help"):
             print(PACKAGE_DOC)
             print(HELP)
             return
         print(f"unknown option: {cmd} (try --help)")
         sys.exit(2)
-    play_interactive()
+    play_interactive(wide=wide)
