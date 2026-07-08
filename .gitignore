@@ -12,5 +12,6 @@ data/benchmark*.log
 data/patterns.bin
 data/patterns_full.bin
 
-# Harness / tooling artifacts
-.claude/
+# Harness / tooling artifacts (but keep committed project skills)
+.claude/*
+!.claude/skills/
