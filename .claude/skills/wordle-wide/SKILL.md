@@ -13,6 +13,15 @@ the next word. Repeat until solved (or 6 guesses run out).
 than the curated ~2.3k NYT answers — use it for rare/obscure answers. It's what
 `python wordle_solver.py --wide` does; this skill just makes it conversational.
 
+## Where this runs
+
+This is a **Claude Code** skill and only works in a Claude Code surface (the
+CLI, the claude.ai/code web app, the desktop app, or an IDE extension) running
+with this repo checked out. It shells out to `python wordle_next.py`, so it
+needs the repo files, a Python interpreter, and the local pattern-matrix cache
+on disk. It does **not** work in a plain claude.ai chat — that surface can't
+load a project's `.claude/skills/` or run local commands.
+
 ## The tool
 
 Everything runs through `wordle_next.py` at the project root. It is **stateless**:
