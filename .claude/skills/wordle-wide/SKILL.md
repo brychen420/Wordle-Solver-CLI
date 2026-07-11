@@ -24,17 +24,23 @@ load a project's `.claude/skills/` or run local commands.
 
 ## The tool
 
-Everything runs through `wordle_next.py` at the project root. It is **stateless**:
-you pass it every hint code entered *so far*, in order, and it prints the guess to
-play next. So **you** are responsible for keeping the running list of hint codes.
+Everything runs through `wordle_next.py` at the project root. Use its
+**incremental** mode: the game is kept on disk between turns, so you pass only
+the *newest* hint each turn (not the whole history) and each turn does a single
+ranking.
 
 ```sh
-python wordle_next.py                 # first guess (no hints yet)
-python wordle_next.py 01010           # after the user's 1st hint
-python wordle_next.py 01010 01210     # after the 1st and 2nd hints
+python wordle_next.py --new           # start a game, prints the first word
+python wordle_next.py --hint 01010    # apply one hint, prints the next word
+python wordle_next.py --hint 22222    # 22222 = solved
 ```
 
-Run it from the project root (`/home/user/Wordle-Solver-CLI`).
+Run it from the project root (`/home/user/Wordle-Solver-CLI`). One game runs at
+a time by default; add `--id NAME` to `--new`/`--hint` to run several at once.
+
+> A legacy stateless mode also exists — `python wordle_next.py 01010 01210`
+> (every code so far, in order) — but prefer the incremental mode above: it's
+> faster and you can't drop or misorder a code.
 
 ## Hint codes
 
@@ -52,19 +58,20 @@ the 5-digit code yourself before adding it to the list.
 
 ## How to run a session
 
-1. **Start.** Maintain an ordered list of hint codes for this game, initially
-   empty. Run `python wordle_next.py` and tell the user the suggested first word
-   (it will be `SALET`). Ask them to play it and report the hint.
-   - Note: the very first run on a fresh clone spends ~3.5 min building and
-     caching the pattern matrix, then every run after is instant. Tell the user
-     if that happens so they know why it's slow.
-2. **Each turn.** When the user reports a hint, convert it to a 5-digit code,
-   append it to your list, and run `python wordle_next.py <all codes so far>`.
-   Relay the next suggested word (and, briefly, how many candidates remain).
+1. **Start.** Run `python wordle_next.py --new` and tell the user the suggested
+   first word (it will be `SALET`). Ask them to play it and report the hint.
+   `--new` is instant — it doesn't load the matrix.
+   - Note: the *first `--hint`* on a fresh clone may spend ~3.5 min building and
+     caching the pattern matrix (unless the SessionStart hook already did it),
+     then every turn after is instant. Tell the user if that happens.
+2. **Each turn.** When the user reports a hint, convert it to a 5-digit code and
+   run `python wordle_next.py --hint <that one code>`. Relay the next suggested
+   word (and, briefly, how many candidates remain). You do **not** track the
+   history — the tool does.
 3. **Terminal states**, printed by the tool:
    - `SOLVED in N guess(es)` → congratulate and stop.
    - `NO MATCH` → a hint was likely mistyped; ask the user to double-check the
-     codes so far, correct the list, and re-run.
+     codes so far, then start over with `--new` and re-enter them.
    - `OUT OF GUESSES` → report the remaining possibilities it lists.
    - A `(widened...)` note just means the curated pool ran out mid-game and the
      search expanded; keep going normally.
@@ -73,7 +80,6 @@ the 5-digit code yourself before adding it to the list.
 
 - Keep replies short: the current guess, remaining count, and a prompt for the
   next hint. Don't dump the full top-picks list unless the user asks.
-- Always pass the **complete** history each turn — the tool rebuilds state by
-  replaying it. If you drop a code, the suggestion will be wrong.
+- To start a fresh game, just run `--new` again — it resets the saved state.
 - If the user wants normal (curated NYT) mode instead of wide, point them to
   `python wordle_solver.py` — this skill is specifically the wide pool.

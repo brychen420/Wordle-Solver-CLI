@@ -12,6 +12,9 @@ data/benchmark*.log
 data/patterns.bin
 data/patterns_full.bin
 
+# Per-game state written by wordle_next.py --new/--hint (transient)
+data/games/
+
 # Harness / tooling artifacts (but keep committed project skills, hooks, config)
 .claude/*
 !.claude/skills/
